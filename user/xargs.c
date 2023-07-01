@@ -10,7 +10,7 @@ main(int argc, char *argv[])
 {
     sleep(10);
     char xargs[8][8][32]={0}, ch;
-    int xargt = 0,xargc=0, col = 0, i=0, j=0, n=0;
+    int xargt = 0,xargc=0, col = 0, i=0, j=0, n=0, p=0;
     char *xargv[MAXARG];
     int xargcs[MAXARG]={0};
     
@@ -45,9 +45,10 @@ main(int argc, char *argv[])
         for(n=argc-1;n<8;n++){
             xargv[n]=0;
         }
+        p=j;
         for(n=0;n<xargcs[i]+1;n++){
-            xargv[j]=xargs[i][n];
-            j++;
+            xargv[p]=xargs[i][n];
+            p++;
         }
         if(fork()==0){
             exec(argv[1], xargv);
