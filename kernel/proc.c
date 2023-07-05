@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sysinfo.h"
 
 struct cpu cpus[NCPU];
 
@@ -659,11 +660,33 @@ procdump(void)
   }
 }
 
-// trace the system call
+// Trace the system call
 int
 trace(int mask)
 {
   struct proc *p = myproc();
   p->tracemask = mask;
+  return 0;
+}
+
+//Return system info.
+int
+sysinfo(uint64 addr)
+{
+  struct proc *p;
+  struct sysinfo info;
+  uint64 nproc = 0;
+
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+    if(p->state != UNUSED) {
+      nproc++;
+    }
+  }
+  info.nproc = nproc;
+  info.freemem = getfreemem();
+  p = myproc();
+  if(copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+      return -1;
   return 0;
 }
