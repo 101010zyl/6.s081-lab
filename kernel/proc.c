@@ -305,6 +305,9 @@ fork(void)
 
   pid = np->pid;
 
+  // Set tracemask of child.
+  np->tracemask = p->tracemask;
+
   release(&np->lock);
 
   acquire(&wait_lock);
@@ -370,6 +373,7 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+  p->tracemask = 0;
 
   release(&wait_lock);
 
@@ -653,4 +657,13 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// trace the system call
+int
+trace(int mask)
+{
+  struct proc *p = myproc();
+  p->tracemask = mask;
+  return 0;
 }
