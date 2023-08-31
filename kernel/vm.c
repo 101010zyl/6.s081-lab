@@ -440,13 +440,13 @@ vmprintwalk(pagetable_t pagetable, int level)
   if(level > 2) return;
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
-    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+    if((pte & PTE_V) != 0){
       int j;
       for(j=0; j < level + 1; j++){
         printf(" ..");
       }
       uint64 child = PTE2PA(pte);
-      printf("%d: pte %p pa %p\n", i, pagetable[i], (pagetable_t)child);
+      printf("%d: pte %p pa %p\n", i, pte, (pagetable_t)child);
       
       vmprintwalk((pagetable_t)child, level + 1);
     }
