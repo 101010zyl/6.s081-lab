@@ -120,6 +120,31 @@ walkaddr(pagetable_t pagetable, uint64 va)
   return pa;
 }
 
+int
+walkaccess(pagetable_t pagetable, uint64 firstpage)
+{
+  pte_t *pte;
+  uint64 va = PGROUNDDOWN(firstpage);
+  
+  if(va >= MAXVA)
+    return -1;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    return -1;
+  if((*pte & PTE_V) == 0)
+    return -1;
+  if((*pte & PTE_U) == 0)
+    return -2;
+  
+  if((*pte & PTE_A) != 0){
+    *pte &= ~PTE_A;
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
@@ -459,3 +484,4 @@ vmprint(pagetable_t pagetable)
   printf("page table %p\n", pagetable);
   vmprintwalk(pagetable, 0);
 }
+

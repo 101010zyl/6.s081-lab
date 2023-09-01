@@ -675,3 +675,23 @@ procdump(void)
     printf("\n");
   }
 }
+
+uint64
+pgaccess(uint64 firstpage, int n, uint64 output)
+{
+  unsigned int buffer = 0;
+  int i = 0;
+  int bit = 0;
+  struct proc *p = myproc();
+  for(i = 0; i < n; i++){
+    bit = 0;
+    bit = walkaccess(p->pagetable, firstpage + i * PGSIZE);
+    if(bit == 1){
+      buffer |= bit << i;
+    } else if(bit < 0){
+      return -1;
+    }
+  }
+  copyout(p->pagetable, output, (char *)&buffer, sizeof(buffer));
+  return 0;
+}

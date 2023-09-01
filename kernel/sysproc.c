@@ -77,11 +77,17 @@ sys_sleep(void)
 
 
 #ifdef LAB_PGTBL
-int
+uint64
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
-  return 0;
+  uint64 firstpage;
+  int number;
+  uint64 output;
+  if(argaddr(0, &firstpage) < 0 || argint(1, &number) < 0 || argaddr(2, &output) < 0)
+    return -1;
+
+  return pgaccess(firstpage, number, output);
 }
 #endif
 
