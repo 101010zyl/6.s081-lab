@@ -302,8 +302,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
-  uint flags;
-  char *mem;
+  uint64 flags, newflags;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -312,11 +311,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    newflags = PTE_NO_WRITE(flags);
+    printf("old pte: %p\n", *pte);
+    (*pte) = PTE_NO_WRITE(*pte);
+    printf("new pte: %p\n", *pte);
+    //if((mem = kalloc()) == 0)
+    //  goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, pa, newflags) != 0){
+      // kfree(mem);
+      printf("uvmcopy: cow failed.\n");
       goto err;
     }
   }
