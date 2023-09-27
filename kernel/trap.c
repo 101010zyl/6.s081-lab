@@ -35,12 +35,12 @@ cow(pagetable_t pagetable, uint64 va)
 {
   uint64 newpa, oldpa;
   va = PGROUNDDOWN(va);
-  if((newpa = (uint64)kalloc()) ==0){
-    printf("cow: kalloc\n");
+  if((oldpa = walkaddr(pagetable, va)) == 0){
+    //printf("cow: walkaddr\n");
     return 0;
   }
-  if((oldpa = walkaddr(pagetable, va)) == 0){
-    printf("cow: walkaddr\n");
+  if((newpa = (uint64)kalloc(0, 0)) ==0){
+    printf("cow: kalloc\n");
     return 0;
   }
   memmove((void *)newpa, (void *)oldpa, PGSIZE);
@@ -96,7 +96,7 @@ usertrap(void)
       p->killed = 1;
     }
     if(cow(p->pagetable, va) == 0){
-      printf("usertrap: cow \n");
+      //printf("usertrap: cow \n");
       p->killed = 1;
     }
   } else {

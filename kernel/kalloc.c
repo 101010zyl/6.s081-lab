@@ -42,8 +42,9 @@ freerange(void *pa_start, void *pa_end)
 
   pagenum = 0;
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
-    krefer((uint64)p, 0);
-    krefer((uint64)p, 1);
+    acquire(&kmem.lock);
+    kmem.refer[REFERINDEX(p)] = 1;
+    release(&kmem.lock);
     kfree(p);
   }
   printf("nm:%d\n", pagenum);
@@ -62,7 +63,7 @@ kfree(void *pa)
   
   acquire(&kmem.lock);
   kmem.refer[REFERINDEX(pa)] -= 1;
-  if(kmem.refer[REFERINDEX(pa)] > 10 || kmem.refer[REFERINDEX(pa)] < 0){
+  if(kmem.refer[REFERINDEX(pa)] > 1000 || kmem.refer[REFERINDEX(pa)] < 0){
     printf("very big or small\n");
   }
   if(kmem.refer[REFERINDEX(pa)] == 0){
@@ -82,29 +83,36 @@ kfree(void *pa)
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
 void *
-kalloc(void)
+kalloc(uint64 pa, int op)
 {
   struct run *r;
   if(pagenum == 0){
     return 0;
   }
-  acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(kmem.refer[REFERINDEX(r)] != 0){
-    printf("kalloc: refer\n");
+  if(op){
+    acquire(&kmem.lock);
+    kmem.refer[REFERINDEX(pa)]++;
+    release(&kmem.lock);
+    return (void *)pa;
+  } else {
+    acquire(&kmem.lock);
+    r = kmem.freelist;
+    if(kmem.refer[REFERINDEX(r)] != 0){
+      printf("kalloc: refer\n");
+    }
+    if(r){
+      kmem.freelist = r->next;
+      kmem.refer[REFERINDEX(r)]++;
+    }
+    pagenum--;
+    release(&kmem.lock);
+    if(pagenum % 5000 == 0){
+      // printf("pgnum: %d\n", pagenum);
+    }
+    if(r)
+      memset((char*)r, 5, PGSIZE); // fill with junk
+    return (void*)r;
   }
-  if(r){
-    kmem.freelist = r->next;
-    kmem.refer[REFERINDEX(r)] = 1;
-  }
-  pagenum--;
-  release(&kmem.lock);
-  if(pagenum % 5000 == 0){
-    // printf("pgnum: %d\n", pagenum);
-  }
-  if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
 }
 
 // Adjust the reference.
