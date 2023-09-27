@@ -354,6 +354,8 @@ sfence_vma()
 
 #define PTE_NO_WRITE(pte) ((pte) & (~PTE_W))
 
+#define REFERINDEX(pa) (((uint64)(pa)-pastart) >> 12)
+
 // extract the three 9-bit page table indices from a virtual address.
 #define PXMASK          0x1FF // 9 bits
 #define PXSHIFT(level)  (PGSHIFT+(9*(level)))

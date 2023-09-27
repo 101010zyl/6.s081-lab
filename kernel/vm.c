@@ -80,8 +80,10 @@ kvminithart()
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
-  if(va >= MAXVA)
-    panic("walk");
+  if(va >= MAXVA){
+    return 0;
+  }
+    // panic("walk");
 
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
@@ -151,9 +153,6 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if(((*pte) & PTE_V) && !((*pte) & PTE_COW)){
       panic("mappages: remap");
     }
-    if(((*pte) & PTE_V) && ((*pte) & PTE_COW)){
-      (*pte) &= ~PTE_COW;
-    }
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -162,7 +161,28 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   }
   return 0;
 }
-
+int
+mapcow(pagetable_t pagetable, uint64 va, uint64 pa)
+{
+  pte_t *pte;
+  int flags = 0;
+  if((pte = walk(pagetable, va, 0)) == 0){
+    printf("mapcow: walk\n");
+    return -1;
+  }
+  flags = PTE_FLAGS(*pte);
+  if((flags & PTE_COW) == 0){
+    printf("mapcow: not cow page\n");
+    return -1;
+  }
+  flags &= (~PTE_COW);
+  flags |= PTE_W;
+  if(mappages(pagetable, va, PGSIZE, pa, flags) != 0){
+    printf("mapcow: mappages\n");
+    return -1;
+  }
+  return 0;
+}
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
@@ -313,19 +333,23 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     newflags = PTE_NO_WRITE(flags);
     newflags |= PTE_COW;
-    printf("old pte: %p\n", *pte);
     (*pte) = PTE_NO_WRITE(*pte);
-    printf("new pte: %p\n", *pte);
+    (*pte) |= PTE_COW;
     //if((mem = kalloc()) == 0)
     //  goto err;
     //memmove(mem, (char*)pa, PGSIZE);
     if(mappages(new, i, PGSIZE, pa, newflags) != 0){
       // kfree(mem);
       printf("uvmcopy: cow failed.\n");
+      goto err;
+    }
+    if(krefer(pa, 1) != 0){
+      printf("uvmcopy: krefer\n");
       goto err;
     }
   }
@@ -356,10 +380,14 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    pte_t *pte = walk(pagetable, va0, 0);
+    if(((*pte) & PTE_COW) != 0){
+      pa0 = cow(pagetable, va0);
+    } else {
+      pa0 = walkaddr(pagetable, va0);
+    }
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

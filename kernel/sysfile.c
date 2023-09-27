@@ -72,9 +72,14 @@ sys_read(void)
   struct file *f;
   int n;
   uint64 p;
+  struct proc *pr = myproc();
 
   if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
     return -1;
+  if(p >= pr->sz){
+    return -1;
+  }
+  
   return fileread(f, p, n);
 }
 
@@ -464,6 +469,12 @@ sys_pipe(void)
 
   if(argaddr(0, &fdarray) < 0)
     return -1;
+
+  struct proc *pr = myproc();
+  if(fdarray >= pr->sz){
+    return -1;
+  }
+
   if(pipealloc(&rf, &wf) < 0)
     return -1;
   fd0 = -1;

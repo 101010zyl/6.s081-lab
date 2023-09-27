@@ -30,26 +30,26 @@ trapinithart(void)
 }
 
 // cow
-int
+uint64
 cow(pagetable_t pagetable, uint64 va)
 {
   uint64 newpa, oldpa;
-
-
+  va = PGROUNDDOWN(va);
   if((newpa = (uint64)kalloc()) ==0){
     printf("cow: kalloc\n");
-    return -1;
+    return 0;
   }
   if((oldpa = walkaddr(pagetable, va)) == 0){
     printf("cow: walkaddr\n");
-    return -1;
+    return 0;
   }
-  memmove(newpa, oldpa, PGSIZE);
-  if(mappages(pagetable, va, PGSIZE, newpa, PTE_W) != 0){
-    printf("cow: mappages\n");
-    return -1;
+  memmove((void *)newpa, (void *)oldpa, PGSIZE);
+  if(mapcow(pagetable, va, newpa) != 0){
+    printf("cow: mapcow\n");
+    return 0;
   }
-  return 0;
+  kfree((void*)oldpa);
+  return newpa;
 }
 
 //
@@ -92,8 +92,10 @@ usertrap(void)
     // ok
   } else if(r_scause()==15){
     uint64 va = r_stval();
-
-    if(cow(p->pagetable, va) != 0){
+    if(va >= MAXVA){
+      p->killed = 1;
+    }
+    if(cow(p->pagetable, va) == 0){
       printf("usertrap: cow \n");
       p->killed = 1;
     }

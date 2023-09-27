@@ -21,6 +21,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  int refer[32800];
 } kmem;
 
 void
@@ -30,13 +31,22 @@ kinit()
   freerange(end, (void*)PHYSTOP);
 }
 
+static uint64 pastart;
+uint64 pagenum;
 void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  pastart = (uint64)p;
+
+  pagenum = 0;
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    krefer((uint64)p, 0);
+    krefer((uint64)p, 1);
     kfree(p);
+  }
+  printf("nm:%d\n", pagenum);
 }
 
 // Free the page of physical memory pointed at by v,
@@ -47,18 +57,24 @@ void
 kfree(void *pa)
 {
   struct run *r;
-
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
-
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
-
+  
   acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+  kmem.refer[REFERINDEX(pa)] -= 1;
+  if(kmem.refer[REFERINDEX(pa)] > 10 || kmem.refer[REFERINDEX(pa)] < 0){
+    printf("very big or small\n");
+  }
+  if(kmem.refer[REFERINDEX(pa)] == 0){
+    // Fill with junk to catch dangling refs.
+    memset(pa, 1, PGSIZE);
+
+    r = (struct run*)pa;
+
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    pagenum++;
+  }
   release(&kmem.lock);
 }
 
@@ -69,14 +85,38 @@ void *
 kalloc(void)
 {
   struct run *r;
-
+  if(pagenum == 0){
+    return 0;
+  }
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(kmem.refer[REFERINDEX(r)] != 0){
+    printf("kalloc: refer\n");
+  }
+  if(r){
     kmem.freelist = r->next;
+    kmem.refer[REFERINDEX(r)] = 1;
+  }
+  pagenum--;
   release(&kmem.lock);
-
+  if(pagenum % 5000 == 0){
+    // printf("pgnum: %d\n", pagenum);
+  }
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+// Adjust the reference.
+int
+krefer(uint64 pa, int op)
+{
+  acquire(&kmem.lock);
+  if(op == 0){
+    kmem.refer[REFERINDEX(pa)] = 0;
+  } else{
+    kmem.refer[REFERINDEX(pa)] += op;
+  }
+  release(&kmem.lock);
+  return 0;
 }
