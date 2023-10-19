@@ -105,6 +105,7 @@ e1000_transmit(struct mbuf *m)
 
   printf("e1000_transmit()\n");
 
+  push_off();
   acquire(&e1000_lock);
 
   uint32 tdt = regs[E1000_TDT];
@@ -132,6 +133,7 @@ e1000_transmit(struct mbuf *m)
   regs[E1000_TDT] = (regs[E1000_TDT] + 1) % TX_RING_SIZE;
 
   release(&e1000_lock);
+  pop_off();
   return 0;
 }
 
@@ -165,8 +167,7 @@ e1000_recv(void)
   rx_mbufs[rdt]->len = tail->length;
   // rx_mbufs[rdt]->head = tail->addr;
 
-  net_rx(rx_mbufs[rdt]);
-
+  struct mbuf *rec = rx_mbufs[rdt];
   struct mbuf *new = mbufalloc(0);
   tail->addr = (uint64)new->head;
   tail->status = 0;
@@ -176,6 +177,8 @@ e1000_recv(void)
 
   release(&e1000_lock);
   pop_off();
+
+  net_rx(rec);
 }
 
 void
