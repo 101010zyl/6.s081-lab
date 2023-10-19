@@ -92,6 +92,13 @@ e1000_init(uint32 *xregs)
   regs[E1000_IMS] = (1 << 7); // RXDW -- Receiver Descriptor Write Back
 }
 
+void
+showregs()
+{
+  printf("rdh: %d\n", regs[E1000_RDH]);
+  printf("rdt: %d\n", regs[E1000_RDT]);
+}
+
 int
 e1000_transmit(struct mbuf *m)
 {
@@ -108,6 +115,7 @@ e1000_transmit(struct mbuf *m)
   push_off();
   acquire(&e1000_lock);
 
+  showregs();
   uint32 tdt = regs[E1000_TDT];
   // printf("tdt: %p\n", tdt);
 
@@ -153,6 +161,7 @@ e1000_recv(void)
   push_off();
   acquire(&e1000_lock);
 
+  showregs();
   uint32 rdt = regs[E1000_RDT];
   rdt = (rdt + 1) % RX_RING_SIZE;
 
