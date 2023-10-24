@@ -97,6 +97,8 @@ showregs()
 {
   printf("rdh: %d\n", regs[E1000_RDH]);
   printf("rdt: %d\n", regs[E1000_RDT]);
+  // printf("tdh: %d\n", regs[E1000_TDH]);
+  // printf("tdt: %d\n", regs[E1000_TDT]);
 }
 
 int
@@ -110,12 +112,11 @@ e1000_transmit(struct mbuf *m)
   // a pointer so that it can be freed after sending.
   //
 
-  printf("e1000_transmit()\n");
-
+  // printf("e1000_transmit()\n");
   push_off();
   acquire(&e1000_lock);
 
-  showregs();
+  // showregs();
   uint32 tdt = regs[E1000_TDT];
   // printf("tdt: %p\n", tdt);
 
@@ -155,13 +156,12 @@ e1000_recv(void)
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
 
-  printf("e1000_recv()\n");
+  // printf("e1000_recv()\n");
   // printf("uint32* : %d\n", sizeof(uint32 *));
-
   push_off();
   acquire(&e1000_lock);
 
-  showregs();
+  // showregs();
   uint32 rdt = regs[E1000_RDT];
   rdt = (rdt + 1) % RX_RING_SIZE;
 
@@ -185,8 +185,8 @@ e1000_recv(void)
   regs[E1000_RDT] = rdt;
 
   release(&e1000_lock);
-  pop_off();
 
+  pop_off();
   net_rx(rec);
 }
 
