@@ -18,15 +18,21 @@ struct run {
   struct run *next;
 };
 
-struct {
+struct kmemcore{
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+};
+
+struct kmemcore kmem[NCPU];
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  int i;
+  for(i = 0; i < NCPU; i++){
+    initlock(&kmem[i].lock, "kmem");
+    kmem[i].freelist = 0;
+  }
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -34,9 +40,13 @@ void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
+  int pagenum = 0;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
     kfree(p);
+    pagenum++;
+  }
+  printf("pagenum: %d\n", pagenum);
 }
 
 // Free the page of physical memory pointed at by v,
@@ -56,10 +66,14 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  push_off();
+  int cpu = cpuid();
+  pop_off();
+
+  acquire(&kmem[cpu].lock);
+  r->next = kmem[cpu].freelist;
+  kmem[cpu].freelist = r;
+  release(&kmem[cpu].lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -70,13 +84,37 @@ kalloc(void)
 {
   struct run *r;
 
-  acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
+  push_off();
+  int cpu = cpuid();
+  pop_off();
 
-  if(r)
+  acquire(&kmem[cpu].lock);
+  r = kmem[cpu].freelist;
+  if(r){
+    kmem[cpu].freelist = r->next;
+    release(&kmem[cpu].lock);
     memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
+    return (void*)r;
+  }else{
+    release(&kmem[cpu].lock);
+
+    int i;
+    for(i = 0; i < NCPU; i++){
+      if(i == cpu){
+        continue;
+      }
+      acquire(&kmem[i].lock);
+      r = kmem[i].freelist;
+      if(r){
+        kmem[i].freelist = r->next;
+        release(&kmem[i].lock);
+        memset((char*)r, 5, PGSIZE); // fill with junk
+        return (void*)r;
+      }else{
+        release(&kmem[i].lock);
+      }
+    }
+  }
+  return 0;
+
 }
