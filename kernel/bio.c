@@ -26,12 +26,10 @@
 struct {
   struct spinlock lock;
   struct buf buf[NBUF];
-  struct spinlock buflock[NBUF];
 
   // Linked list of all buffers, through prev/next.
   // Sorted by how recently the buffer was used.
   // head.next is most recent, head.prev is least.
-  struct buf head;
 } bcache;
 void
 printcore()
@@ -44,11 +42,9 @@ printcore()
 void
 binit(void)
 {
-  struct buf *b;
-
   initlock(&bcache.lock, "bcache");
   for(int i = 0; i < NBUF; i++){
-    initlock(&bcache.buflock[i], "bcache.bucket");
+    initlock(&bcache.buf[i].reflock, "bcache.bucket");
     initsleeplock(&bcache.buf[i].lock, "buffer");
   }
 }
@@ -59,17 +55,18 @@ hash(uint dev, uint blockno)
   uint result = (dev + blockno) % NBUF;
   return result;
 }
-uint
-find(uint dev, uint blockno)
-{
-  uint i, idx, result;
-  idx = hash(dev, blockno);
-  for(i = 0; i < NBUF; i++){
-    acquire(&bcache.buflock[idx]);
-    release(&bcache.buflock[idx]);
+// uint
+// find(uint dev, uint blockno)
+// {
+//   uint i, idx, result;
+//   idx = hash(dev, blockno);
+//   for(i = 0; i < NBUF; i++){
+//     acquire(&bcache.buf[idx].reflock);
+//     release(&bcache.buf[idx].reflock);
     
-  }
-}
+//   }
+//   return result;
+// }
 // Look through buffer cache for block on device dev.
 // If not found, allocate a buffer.
 // In either case, return locked buffer.
@@ -87,7 +84,7 @@ bget(uint dev, uint blockno)
   for(i = 0; i < NBUF; i++){
     b = bcache.buf + idx;
 
-    acquire(&bcache.buflock[idx]);
+    acquire(&b->reflock);
     if(b->dev == dev && b->blockno == blockno){
       // printf("bget cached: %d\n", i);
       b->refcnt++;
@@ -96,11 +93,11 @@ bget(uint dev, uint blockno)
       b->tick = ticks;
       release(&tickslock);
 
-      release(&bcache.buflock[idx]);
+      release(&b->reflock);
       acquiresleep(&b->lock);
       return b;
     }
-    release(&bcache.buflock[idx]);
+    release(&b->reflock);
     idx = (idx + 1) % NBUF;
   }
   // Not cached.
@@ -112,7 +109,7 @@ bget(uint dev, uint blockno)
   for(i = 0; i < NBUF; i++){
     b = bcache.buf + idx;
 
-    acquire(&bcache.buflock[idx]);
+    acquire(&b->reflock);
 
     if((b->refcnt == 0) && (b->tick == 0)){
       // printf("bget not cached: %d\n", i);
@@ -125,7 +122,7 @@ bget(uint dev, uint blockno)
       b->tick = ticks;
       release(&tickslock);
 
-      release(&bcache.buflock[idx]);
+      release(&b->reflock);
 
       acquiresleep(&b->lock);
       return b;
@@ -135,7 +132,7 @@ bget(uint dev, uint blockno)
       lst = b->tick;
       lstidx = idx;
     }
-    release(&bcache.buflock[idx]);
+    release(&b->reflock);
     idx = (idx + 1) % NBUF;
   }
   if(lst < 0){
@@ -144,7 +141,7 @@ bget(uint dev, uint blockno)
   // printf("bget not cached lst: %d\n", lstidx);
   b = bcache.buf + lstidx;
 
-  acquire(&bcache.buflock[lstidx]);
+  acquire(&b->reflock);
   b->dev = dev;
   b->blockno = blockno;
   b->valid = 0;
@@ -154,7 +151,7 @@ bget(uint dev, uint blockno)
   b->tick = ticks;
   release(&tickslock);
   
-  release(&bcache.buflock[lstidx]);
+  release(&b->reflock);
   acquiresleep(&b->lock);
   return b;
 }
@@ -192,29 +189,15 @@ brelse(struct buf *b)
 
   releasesleep(&b->lock);
 
-  acquire(&bcache.lock);
+  acquire(&b->reflock);
   b->refcnt--;
-  if (b->refcnt == 0) {
-    uint idx = hash(b->dev, b->blockno);
-    // printcore();
-    // printf("hash: %d ", idx);
-    int i;
-    for(i = 0; i < NBUF; i++){
-      acquire(&bcache.buflock[idx]);
-      if((b->dev == bcache.buf[idx].dev) && (b->blockno == bcache.buf[idx].blockno)){
-        // printf("brelse: %d\n", i);
-        acquire(&tickslock);
-        b->tick = ticks;
-        release(&tickslock);
-        release(&bcache.buflock[idx]);
-        break;
-      }
-      release(&bcache.buflock[idx]);
-      idx = (idx + 1) % NBUF;
-    }
+  if(b->refcnt == 0){
+    acquire(&tickslock);
+    b->tick = ticks;
+    release(&tickslock);
   }
+  release(&b->reflock);
   
-  release(&bcache.lock);
 }
 
 void
