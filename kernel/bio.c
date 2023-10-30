@@ -79,6 +79,7 @@ bget(uint dev, uint blockno)
   uint i, idx;
   idx = hash(dev, blockno);
 
+  acquire(&bcache.lock);
   // printcore();
   // printf("hash: %d ", idx);
   for(i = 0; i < NBUF; i++){
@@ -89,23 +90,24 @@ bget(uint dev, uint blockno)
       // printf("bget cached: %d\n", i);
       b->refcnt++;
 
-      acquire(&tickslock);
-      b->tick = ticks;
-      release(&tickslock);
+      // acquire(&tickslock);
+      // b->tick = ticks;
+      // release(&tickslock);
 
       release(&b->reflock);
+      release(&bcache.lock);
       acquiresleep(&b->lock);
       return b;
     }
     release(&b->reflock);
-    idx = (idx + 1) % NBUF;
+    idx = (idx + i + 1) % NBUF;
   }
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
   
   int lst = -1;
   int lstidx = 0;
-
+  
   for(i = 0; i < NBUF; i++){
     b = bcache.buf + idx;
 
@@ -118,12 +120,8 @@ bget(uint dev, uint blockno)
       b->valid = 0;
       b->refcnt = 1;
 
-      acquire(&tickslock);
-      b->tick = ticks;
-      release(&tickslock);
-
       release(&b->reflock);
-
+      release(&bcache.lock);
       acquiresleep(&b->lock);
       return b;
     }
@@ -133,7 +131,7 @@ bget(uint dev, uint blockno)
       lstidx = idx;
     }
     release(&b->reflock);
-    idx = (idx + 1) % NBUF;
+    idx = (idx + i + 1) % NBUF;
   }
   if(lst < 0){
     panic("bget: no buffers");
@@ -150,8 +148,12 @@ bget(uint dev, uint blockno)
   acquire(&tickslock);
   b->tick = ticks;
   release(&tickslock);
-  
+  // printf("tick: %d\n", b->tick);
+
   release(&b->reflock);
+
+  release(&bcache.lock);
+
   acquiresleep(&b->lock);
   return b;
 }
@@ -188,6 +190,7 @@ brelse(struct buf *b)
     panic("brelse");
 
   releasesleep(&b->lock);
+  acquire(&bcache.lock);
 
   acquire(&b->reflock);
   b->refcnt--;
@@ -197,20 +200,25 @@ brelse(struct buf *b)
     release(&tickslock);
   }
   release(&b->reflock);
+  release(&bcache.lock);
   
 }
 
 void
 bpin(struct buf *b) {
   acquire(&bcache.lock);
+  acquire(&b->reflock);
   b->refcnt++;
+  release(&b->reflock);
   release(&bcache.lock);
 }
 
 void
 bunpin(struct buf *b) {
   acquire(&bcache.lock);
+  acquire(&b->reflock);
   b->refcnt--;
+  release(&b->reflock);
   release(&bcache.lock);
 }
 
