@@ -4,6 +4,7 @@ struct buf {
   uint dev;
   uint blockno;
   struct sleeplock lock;
+  struct spinlock reflock;
   uint refcnt;
   uint tick;
   struct buf *prev; // LRU cache list

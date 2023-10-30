@@ -40,13 +40,13 @@ void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
-  int pagenum = 0;
+  // int pagenum = 0;
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
     kfree(p);
-    pagenum++;
+    // pagenum++;
   }
-  printf("pagenum: %d\n", pagenum);
+  // printf("pagenum: %d\n", pagenum);
 }
 
 // Free the page of physical memory pointed at by v,
