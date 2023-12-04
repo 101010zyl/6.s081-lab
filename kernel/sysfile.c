@@ -322,6 +322,29 @@ sys_open(void)
     return -1;
   }
 
+  if((ip->type == T_SYMLINK) && !(omode & O_NOFOLLOW)){
+    int i = 0;
+    for(i = 0; i < MAXSYMLOOKUP; i++){
+      char target[MAXPATH];
+      strncpy(target, (char *)ip->addrs, DIRSIZ);
+      iunlockput(ip);
+      if((ip = namei(target)) == 0){
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+      if(ip->type == T_FILE){
+        break;
+      }
+    }
+    if(i == MAXSYMLOOKUP){
+      printf("symlink cycle\n");
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
       fileclose(f);
@@ -330,21 +353,16 @@ sys_open(void)
     return -1;
   }
 
+  if(ip->type == T_SYMLINK){
+    f->type = FD_INODE;
+  }
+
   if(ip->type == T_DEVICE){
     f->type = FD_DEVICE;
     f->major = ip->major;
   } else {
     f->type = FD_INODE;
     f->off = 0;
-  }
-
-  if((ip->type == T_SYMLINK) && (omode & O_NOFOLLOW)){
-    f->type = FD_INODE;
-  } else if(ip->type == T_SYMLINK){
-    int i = 0;
-    for(i = 0; i < MAXSYMLOOKUP; i++){
-
-    }
   }
 
   f->ip = ip;
@@ -509,7 +527,8 @@ sys_symlink(void)
     end_op();
     return -1;
   }
-  strncpy(ip->target, target_path, DIRSIZ);
+  strncpy((char *)ip->addrs, target_path, MAXPATH);
+  iupdate(ip);
 
   iunlockput(ip);
   end_op();

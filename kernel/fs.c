@@ -435,8 +435,14 @@ itrunc(struct inode *ip)
   int i, j;
   struct buf *bp, *bpp;
   uint *a, *b;
-
-  printf("itrunc\n");
+  if(ip->type == T_SYMLINK){
+    // printf("itrunc: symlink\n");
+    for(i = 0; i < NDIRECT + 2; i++){
+      ip->addrs[i] = 0;
+    }
+    return;
+  }
+  // printf("itrunc\n");
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
