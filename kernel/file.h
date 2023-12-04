@@ -24,6 +24,7 @@ struct inode {
   short type;         // copy of disk inode
   short major;
   short minor;
+  char target[DIRSIZ];
   short nlink;
   uint size;
   uint addrs[NDIRECT+2];

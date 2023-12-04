@@ -29,11 +29,14 @@ struct superblock {
 #define NDBINDIRECT (BSIZE * BSIZE / sizeof(uint) / sizeof(uint))
 #define MAXFILE (NDIRECT + NINDIRECT + NDBINDIRECT)
 
+#define DIRSIZ 14
+#define MAXSYMLOOKUP 10
 // On-disk inode structure
 struct dinode {
   short type;           // File type
   short major;          // Major device number (T_DEVICE only)
   short minor;          // Minor device number (T_DEVICE only)
+  char target[DIRSIZ];  // symbolic target path(T_SYMLINK only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
   uint addrs[NDIRECT+2];   // Data block addresses
@@ -52,10 +55,10 @@ struct dinode {
 #define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart)
 
 // Directory is a file containing a sequence of dirent structures.
-#define DIRSIZ 14
 
 struct dirent {
   ushort inum;
   char name[DIRSIZ];
 };
+
 

@@ -337,6 +337,16 @@ sys_open(void)
     f->type = FD_INODE;
     f->off = 0;
   }
+
+  if((ip->type == T_SYMLINK) && (omode & O_NOFOLLOW)){
+    f->type = FD_INODE;
+  } else if(ip->type == T_SYMLINK){
+    int i = 0;
+    for(i = 0; i < MAXSYMLOOKUP; i++){
+
+    }
+  }
+
   f->ip = ip;
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
@@ -482,5 +492,26 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+  char target_path[MAXPATH], linkpath[MAXPATH];
+  struct inode *ip;
+  
+  if(argstr(0, target_path, MAXPATH) < 0 || argstr(1, linkpath, MAXPATH) < 0)
+    return -1;
+  
+  begin_op();
+  if((ip = create(linkpath, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+  strncpy(ip->target, target_path, DIRSIZ);
+
+  iunlockput(ip);
+  end_op();
   return 0;
 }
