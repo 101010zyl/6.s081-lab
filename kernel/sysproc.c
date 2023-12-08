@@ -95,3 +95,30 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr = 0;
+  uint length = 0, offset = 0;
+  int prot = 0, flags = 0, fd = 0;
+  if ((argaddr(0, &addr) < 0) || (argint(1, (int*)&length) < 0) 
+    || (argint(2, (int*)&prot) < 0) || (argint(3, (int*)&flags) < 0)
+    || (argint(4, (int*)&fd) < 0) || (argint(5, (int*)&offset) < 0)){
+      return -1;
+  }
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  if(addr == 0){
+
+  }
+  release(&p->lock);
+  return -1;
+  
+}
+uint64
+sys_munmap(void)
+{
+  return -1;
+  
+}
