@@ -199,10 +199,12 @@ mmap(struct mmap_info *mi, uint64 va)
   }
   iunlock(mi->fmap->ip);
 
+  //map the page
   if(mappages(myproc()->pagetable, va, PGSIZE, ka, mi->permission) != 0){
     printf("mmap: mappages\n");
     return -1;
   }
 
+  printf("mmap: %x\n", va);
   return 0;
 }

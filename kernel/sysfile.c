@@ -546,7 +546,7 @@ sys_mmap(void)
   for(i = 0; i < NVMA; i++){
     if(p->map[i].address == 0){
       p->map[i].address = addr;
-      p->map[i].start = addr;
+      p->map[i].start = length;
       p->map[i].length = length;
       p->map[i].permission = perm;
       p->map[i].fmap = f;
@@ -558,6 +558,7 @@ sys_mmap(void)
 
   release(&p->lock);
 
+  printf("sys_mmap: %x\n", addr);
   return addr;
 }
 uint64
@@ -569,6 +570,7 @@ sys_munmap(void)
     return -1;
   }
 
+  printf("sys_munmap\n");
   // find the map info slot
   struct proc *p = myproc();
   acquire(&p->lock);
@@ -589,8 +591,16 @@ sys_munmap(void)
   }
   release(&p->lock);
 
+  // check whether mapped
+  pte_t *page;
+  if((page = (pte_t *)walkaddr(p->pagetable, addr)) == 0){
+    goto well;
+  }
+  page++;
+  page--;
+
   // write back
-  if(mi->mode & MAP_SHARED){
+  if((mi->mode & MAP_SHARED) && (mi->permission & PTE_W)){
     if(filewrite(mi->fmap, addr, length) != length){
       printf("munmap: filewrite\n");
       return -1;
@@ -601,6 +611,7 @@ sys_munmap(void)
   // unmap
   uvmunmap(p->pagetable, addr, length / PGSIZE, 1);
 
+well:
   // adjust map info
   acquire(&p->lock);
   if(addr == mi->address){
@@ -610,6 +621,10 @@ sys_munmap(void)
 
   // clear the VMA
   if(mi->length == 0){
+    release(&p->lock);
+    fileclose(mi->fmap);
+    acquire(&p->lock);
+    p->sz-=mi->start;
     memset((void *)mi, 0, sizeof(struct mmap_info));
   }
   release(&p->lock);

@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -281,6 +282,14 @@ fork(void)
     return -1;
   }
 
+  // Copy VMA table
+  for(int i = 0; i < NVMA; i++){
+    if(p->map[i].address){
+      memmove((void *) (np->map + i), (void *)(p->map + i), sizeof(struct mmap_info));
+      filedup(p->map[i].fmap);
+    }
+  }
+
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -343,6 +352,26 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  // Unmap all VMAs.
+  struct mmap_info *mi = p->map;
+  for(int i = 0; i < NVMA; i++){
+    if(mi->address){
+      // check whether mapped
+      if(walkaddr(p->pagetable, mi->address) != 0){
+        if((mi->mode & MAP_SHARED) && (mi->permission & PTE_W)){
+          if(filewrite(mi->fmap, mi->address, mi->length) != mi->length){
+            panic("exit: filewrite\n");
+          }
+        }
+        uvmunmap(p->pagetable, mi->address, mi->length / PGSIZE, 1);
+      }
+      fileclose(mi->fmap);
+      p->sz -= mi->start;
+      memset((void *)mi, 0, sizeof(struct mmap_info));
+    }
+    mi++;
+  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){

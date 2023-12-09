@@ -72,12 +72,13 @@ usertrap(void)
     uint64 va = r_stval();
     va = PGROUNDDOWN(va);
 
+    acquire(&p->lock);
     // find which VMA is the fault in
     int i = 0;
     struct mmap_info *mi = p->map;
     for(i = 0; i < NVMA; i++){
       if(mi->address){
-        if((va >= mi->start) && (va < (mi->start + mi->length))){
+        if((va >= mi->address) && (va < (mi->length + mi->address))){
           break;
         }
       }
@@ -86,14 +87,17 @@ usertrap(void)
     if(i == NVMA){
       printf("invalid page fault address\n");
       p->killed = 1;
+      release(&p->lock);
       goto killed;
     }
 
     // map one page for the file
     if(mmap(mi, va) < 0){
       p->killed = 1;
+      release(&p->lock);
       goto killed;
     }
+    release(&p->lock);
     
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
