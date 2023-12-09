@@ -2,6 +2,7 @@ struct buf;
 struct context;
 struct file;
 struct inode;
+struct mmap_info;
 struct pipe;
 struct proc;
 struct spinlock;
@@ -33,6 +34,7 @@ void            fileinit(void);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
+int             mmap(struct mmap_info *mi, uint64 va);
 
 // fs.c
 void            fsinit(int);

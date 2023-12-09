@@ -484,3 +484,135 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr = 0;
+  uint length = 0, offset = 0;
+  int prot = 0, flags = 0;
+  struct file *f;
+  if ((argaddr(0, &addr) < 0) || (argint(1, (int*)&length) < 0) 
+    || (argint(2, (int*)&prot) < 0) || (argint(3, (int*)&flags) < 0)
+    || (argfd(4, 0, &f) < 0) || (argint(5, (int*)&offset) < 0)){
+      return -1;
+  }
+
+  struct proc *p = myproc();
+
+  // pin the file
+  filedup(f);
+
+  //set permission
+  int perm = PTE_V | PTE_U;
+  if(flags & MAP_PRIVATE){
+    if(prot & PROT_EXEC){
+      perm |= PTE_X;
+    }
+    if(prot & PROT_READ){
+      perm |= PTE_R;
+    }
+    if(prot & PROT_WRITE){
+      perm |= PTE_W;
+    }
+  } else if(flags & MAP_SHARED){
+    if(((prot & PROT_READ) && (f->readable == 0)) 
+      || ((prot & PROT_WRITE) && (f->writable == 0))){
+        return -1;
+      }
+    if((prot & PROT_READ) && (f->readable != 0)){
+      perm |= PTE_R;
+    }
+    if((prot & PROT_WRITE) && (f->writable != 0)){
+      perm |= PTE_W;
+    }
+    if(prot & PROT_EXEC){
+      perm |= PTE_X;
+    }
+  }
+
+  acquire(&p->lock);
+
+  // acquire the return value, start of mapped addr
+  if(addr == 0){
+    addr = p->sz;
+  }
+
+  // adjust the process size
+  p->sz+=PGROUNDUP(length);
+
+  // find an empty VMA slot
+  int i = 0;
+  for(i = 0; i < NVMA; i++){
+    if(p->map[i].address == 0){
+      p->map[i].address = addr;
+      p->map[i].start = addr;
+      p->map[i].length = length;
+      p->map[i].permission = perm;
+      p->map[i].fmap = f;
+      p->map[i].mode = flags;
+      p->map[i].offset = offset;
+      break;
+    }
+  }
+
+  release(&p->lock);
+
+  return addr;
+}
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  uint length;
+  if((argaddr(0, &addr) < 0) || (argint(1, (int *)&length) < 0)){
+    return -1;
+  }
+
+  // find the map info slot
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  int i;
+  struct mmap_info *mi = p->map;
+  for(i = 0; i < NVMA; i++){
+    if(mi->address){
+      if((addr >= mi->address) && (addr < (mi->address + mi->length))){
+        break;
+      }
+    }
+    mi++;
+  }
+  if(i == NVMA){
+    printf("munmap cannot find\n");
+    release(&p->lock);
+    return -1;
+  }
+  release(&p->lock);
+
+  // write back
+  if(mi->mode & MAP_SHARED){
+    if(filewrite(mi->fmap, addr, length) != length){
+      printf("munmap: filewrite\n");
+      return -1;
+    }
+  }
+  
+
+  // unmap
+  uvmunmap(p->pagetable, addr, length / PGSIZE, 1);
+
+  // adjust map info
+  acquire(&p->lock);
+  if(addr == mi->address){
+    mi->address += length;
+  }
+  mi->length -= length;
+
+  // clear the VMA
+  if(mi->length == 0){
+    memset((void *)mi, 0, sizeof(struct mmap_info));
+  }
+  release(&p->lock);
+
+  return 0;
+}

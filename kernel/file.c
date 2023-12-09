@@ -180,3 +180,29 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+int
+mmap(struct mmap_info *mi, uint64 va)
+{
+  // allocate a page
+  uint64 ka;
+  if((ka = (uint64)kalloc())== 0){
+    printf("mmap kalloc\n");
+    return -1;
+  }
+  memset((void *)ka, 0, PGSIZE);
+
+  // read content
+  ilock(mi->fmap->ip);
+  if((readi(mi->fmap->ip, 0, ka, va - mi->address, PGSIZE)) <= 0){
+    printf("pg fault readi\n");
+    return -1;
+  }
+  iunlock(mi->fmap->ip);
+
+  if(mappages(myproc()->pagetable, va, PGSIZE, ka, mi->permission) != 0){
+    printf("mmap: mappages\n");
+    return -1;
+  }
+
+  return 0;
+}
